@@ -60,9 +60,18 @@ HTML 链接是通过标签 `<a>` 来定义的。
 HTML 图像是通过标签 `<img>` 来定义的。如：
 
 ```html
-<img src="./img1.png" width="258" height="39" />
+<img src="./img1.png" alt="这是一张无效图" title="无效图展示" width="258" height="39" />
 ```
-**文本标签**
+![image](https://user-images.githubusercontent.com/81791654/166146148-8dd12c31-c496-4543-afa1-3aa43ed112af.png)
+
+图像属性: 
+  1. src=”./img1.png” 图片来源,必写 
+  2. alt=”这是一张无效图” 图片不显示时,显示的内容 
+  3. title=”无效图展示” 鼠标移动到图片上时显示的文字 
+  4. width=”258” 图片显示的宽度 
+  5. height=”39” 图片显示的高度
+
+**HTML 文本标签**
 
 `<font>`标签,可以设置颜色和字体大小属性 颜色表示方法(可以参考网站: http://tool.oschina.net/commons?type=3): 
   1. 英文单词 red green blue … 
@@ -70,7 +79,7 @@ HTML 图像是通过标签 `<img>` 来定义的。如：
   3. 使用 rgb(255,255,0) 字体大小可以使用 size 属性,大小范围为 1-7,其中 7 最大,1 最小. 
   4. 有时候需要使用换行标签 ,这是一个短标签 `<br/>` 与之对应另外还有一个水平线也是短标签, `<hr/>`,水平线也可以设置颜色和大小
 
-**列表标签**
+**HTML 列表标签**
 
 列表标签分无序列表和有序列表,分别对应`<ul>`和`<ol>`.
 
@@ -99,3 +108,77 @@ HTML 图像是通过标签 `<img>` 来定义的。如：
   1. 数字:type=1,也是默认方式 
   2. 英文字母:type=a 或 type=A 
   3. 罗马数字:type=i 或 type=I
+
+## 写一个简单的Hmtl页面
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>注册信息</title>
+        <meta charset="utf-8">
+    </head>
+    <body style="background-color:#C0C0C0;">
+    <body>
+        <h1 style="margin-bottom:0;">博客登录</h1></div>
+        <br>
+        <form action="register.cgi" method="POST">
+            账号: <input type="TEXT" name="zhanghao" value="" size="10" maxlength="5">
+            <br>
+            <br>
+            密码: <input type="password" value="" name="mima" size="10">
+            <br>
+            <br>
+            <input type="hidden" value="隐藏的内容" name="mihiddenma" size="10">
+
+            爱好：<input type="checkbox" name="xiebug" checked="checked">写bug<input type="checkbox" name="changge">看书
+            <br>
+            <br>
+            自我介绍：<br>
+            <textarea cols="35" rows="10" name="ziwojieshao">
+这里是自我介绍...
+            </textarea>
+            <br>
+            <br>
+            地址：
+            <select name="dizhi">
+                <option value="sichuan">湖南</option>
+                <option value="beijing">湖北</option>
+                <option value="shanghai">深圳</option>
+                <option value="sichuan">四川</option>
+                <option value="beijing">北京</option>
+                <option value="shanghai">上海</option>
+            </select>
+            <br>
+            <br>
+            <input type="submit" value="提交">
+            <input type="reset" value="重置">
+        </form>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+            <br>
+<div id="footer" style="background-color:#FFA500;clear:both;text-align:center;">
+版权 © Cltcj.com</div>
+
+    </body>
+</html>
+```
+写出来的模样如下图：
+![image](https://user-images.githubusercontent.com/81791654/166147035-d91ac9c7-ba67-435b-97c5-440692d2b329.png)
+
+
