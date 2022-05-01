@@ -35,5 +35,33 @@ HTML 标题（Heading）是通过`<h1> - <h6>` 标签来定义的。如：
 ```
 ![image](https://user-images.githubusercontent.com/81791654/166139399-77eec3a7-2d9f-4342-8287-e5307aa5058d.png#pic_center)
 
+**HTML 段落**  
+```html
+HTML 段落是通过标签 `<p>` 来定义的。如：
 
-  
+<html>
+<head>
+</head>
+<body>
+
+<p>这是一个段落。</p>
+<p>这是一个段落。</p>
+
+</body>
+</html>
+```
+![image](https://user-images.githubusercontent.com/81791654/166139688-807696d4-8d76-4d2f-bcb9-405fda9caed3.png)
+
+**HTML 链接**
+HTML 链接是通过标签 `<a>` 来定义的。
+```html
+<html>
+<head>
+</head>
+<body>
+
+<a href="https://github.com/Cltcj/Implementation-of-a-tinyhttpd">本仓库的地址</a>
+
+</body>
+</html>
+```
