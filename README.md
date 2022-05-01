@@ -12,7 +12,8 @@
 
 ### Html标签
 
-* 标题
+**标题**
+
 HTML 标题（Heading）是通过<h1> - <h6> 标签来定义的。如：
 
 ```html
@@ -33,5 +34,6 @@ HTML 标题（Heading）是通过<h1> - <h6> 标签来定义的。如：
 </html>
 ```
 ![image](https://user-images.githubusercontent.com/81791654/166139399-77eec3a7-2d9f-4342-8287-e5307aa5058d.png)
+
 
   
