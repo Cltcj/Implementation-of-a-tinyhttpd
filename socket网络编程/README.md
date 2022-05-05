@@ -32,6 +32,9 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
 
 &emsp;&emsp;strcut sockaddr 很多网络编程函数诞生早于 IPv4 协议，那时候都使用的是 sockaddr 结构体,为了向前兼容，现 在 sockaddr 退化成了（`void *`）的作用，传递一个地址给函数，至于这个函数是 sockaddr_in 还是 sockaddr_in6，由 地址族确定，然后函数内部再强制类型转化为所需的地址类型。
 
+![image](https://user-images.githubusercontent.com/81791654/166858961-bc25a435-471f-4ccc-86be-1c4282567115.png)
+
+
 ```c
 struct sockaddr 
 {    sa_family_t sa_family;    /* address family, AF_xxx */ 
@@ -88,9 +91,86 @@ struct sockaddr_in servaddr;
 bind(listen_fd, (struct sockaddr *)&servaddr, sizeof(servaddr)); /* initialize servaddr */
 ```
 
+## 网络套接字函数
 
+### socket模型创建流程图
 
+![image](https://user-images.githubusercontent.com/81791654/166859059-a70a3901-c6f5-4d1d-81ba-2d30ad5f861f.png)
 
+### socket函数 
+
+```c
+#include <sys/types.h> /* See NOTES */
+#include <sys/socket.h>
+int socket(int domain, int type, int protocol);
+domain:
+	AF_INET 这是大多数用来产生socket的协议，使用TCP或UDP来传输，用IPv4的地址
+	AF_INET6 与上面类似，不过是来用IPv6的地址
+	AF_UNIX 本地协议，使用在Unix和Linux系统上，一般都是当客户端和服务器在同一台及其上的时候使用
+type:
+	SOCK_STREAM 这个协议是按照顺序的、可靠的、数据完整的基于字节流的连接。这是一个使用最多的socket类型，这个socket是使用TCP来进行传输。
+	SOCK_DGRAM 这个协议是无连接的、固定长度的传输调用。该协议是不可靠的，使用UDP来进行它的连接。
+	SOCK_SEQPACKET该协议是双线路的、可靠的连接，发送固定长度的数据包进行传输。必须把这个包完整的接受才能进行读取。
+	SOCK_RAW socket类型提供单一的网络访问，这个socket类型使用ICMP公共协议。（ping、traceroute使用该协议）
+	SOCK_RDM 这个类型是很少使用的，在大部分的操作系统上没有实现，它是提供给数据链路层使用，不保证数据包的顺序
+protocol:
+	传0 表示使用默认协议。
+返回值：
+	成功：返回指向新创建的socket的文件描述符，失败：返回-1，设置errno
+```
+
+&emsp;&emsp;socket()打开一个网络通讯端口，如果成功的话，就像open()一样返回一个文件描述符，应用程序可以像读写文件一样用read/write在网络上收发数据，如果socket()调用出错则返回-1。对于IPv4，domain参数指定为AF_INET。对于TCP协议，type参数指定为SOCK_STREAM，表示面向流的传输协议。如果是UDP协议，则type参数指定为SOCK_DGRAM，表示面向数据报的传输协议。protocol参数的介绍从略，指定为0即可。
+
+### bind函数
+
+```c
+#include <sys/types.h> /* See NOTES */
+#include <sys/socket.h>
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+sockfd：
+	socket文件描述符
+addr:
+	构造出IP地址加端口号
+addrlen:
+	sizeof(addr)长度
+返回值：
+	成功返回0，失败返回-1, 设置errno
+```
+
+&emsp;&emsp;服务器程序所监听的网络地址和端口号通常是固定不变的，客户端程序得知服务器程序的地址和端口号后就可以向服务器发起连接，因此服务器需要调用bind绑定一个固定的网络地址和端口号。
+
+&emsp;&emsp;bind()的作用是将参数sockfd和addr绑定在一起，使sockfd这个用于网络通讯的文件描述符监听addr所描述的地址和端口号。前面讲过，`struct sockaddr *`是一个通用指针类型，addr参数实际上可以接受多种协议的sockaddr结构体，而它们的长度各不相同，所以需要第三个参数addrlen指定结构体的长度。如：
+
+```c
+struct sockaddr_in servaddr;
+bzero(&servaddr, sizeof(servaddr));
+servaddr.sin_family = AF_INET;
+servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+servaddr.sin_port = htons(6666);
+```
+
+```c
+void bzero(void *s, int n);
+#bzero()将参数s 所指的内存区域前n 个字节全部设为零。
+```
+
+&emsp;&emsp;首先将整个结构体清零，然后设置地址类型为AF_INET，网络地址为INADDR_ANY，这个宏表示本地的任意IP地址，因为服务器可能有多个网卡，每个网卡也可能绑定多个IP地址，这样设置可以在所有的IP地址上监听，直到与某个客户端建立了连接时才确定下来到底用哪个IP地址，端口号为6666。
+
+### listen函数
+
+```c
+#include <sys/types.h> /* See NOTES */
+#include <sys/socket.h>
+int listen(int sockfd, int backlog);
+sockfd:
+	socket文件描述符
+backlog:
+	排队建立3次握手队列和刚刚建立3次握手队列的链接数和
+```
+
+查看系统默认backlog：`cat /proc/sys/net/ipv4/tcp_max_syn_backlog`
+
+&emsp;&emsp;典型的服务器程序可以同时服务于多个客户端，当有客户端发起连接时，服务器调用的accept()返回并接受这个连接，如果有大量的客户端发起连接而服务器来不及处理，尚未accept的客户端就处于连接等待状态，listen()声明sockfd处于监听状态，并且最多允许有backlog个客户端处于连接待状态，如果接收到更多的连接请求就忽略。listen()成功返回0，失败返回-1。
 
 **相关知识补充：**
 
