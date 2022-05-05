@@ -26,6 +26,50 @@
 工作流程：
 
      （1） 服务器启动，在指定端口或随机选取端口绑定 httpd 服务。
+     
+     即:`server_sock = startup(&port);`//如果此时port是指定了且不为0的就调用startup()函数动态创建套接字
+     
+```c
+//开启http服务，包括绑定端口，监听，开启线程处理链接
+int startup(u_short *port)
+{
+	int httpd = 0, option;
+	struct sockaddr_in name;//套接字地址
+	//设置http socket
+	httpd = socket(PF_INET, SOCK_STREAM, 0);//创建TCP套接字
+	if (httpd == -1)//创建失败
+		error_die("socket");
+
+	socklen_t optlen;
+	optlen = sizeof(option);
+	option = 1;
+	setsockopt(httpd, SOL_SOCKET, SO_REUSEADDR, (void *)&option, optlen);
+
+	memset(&name, 0, sizeof(name));//初始化套接字地址
+	name.sin_family = AF_INET;
+	name.sin_port = htons(*port);
+	name.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	if (bind(httpd, (struct sockaddr *)&name, sizeof(name)) < 0)
+	{
+		error_die("bind");	
+	}
+	if (*port == 0)//随机端口，动态分配
+	{
+		/*int namelen = sizeof(name);*/
+		socklen_t namelen = sizeof(name);
+		if (getsockname(httpd, (struct sockaddr *)&name, &namelen) == -1)//获取一个套接字的本地接口
+		{
+			error_die("getsockname");
+		}
+		//那么调用connect连接成功后，使用getsockname可以正确获得当前正在通信的socket的IP和端口地址
+		*port = ntohs(name.sin_port);//转换端口号
+	}
+	if (listen(httpd, 5) < 0)
+		error_die("listen");
+	return (httpd);
+}
+```
 
      （2）收到一个 HTTP 请求时（其实就是 listen 的端口 accpet 的时候），派生一个线程运行 accept_request 函数。
 
@@ -43,11 +87,13 @@
 
     （9） 在父进程中，关闭 cgi_input 的读取端 和 cgi_output 的写入端，如果 POST 的话，把 POST 数据写入 cgi_input，已被重定向到 STDIN，读取 cgi_output 的管道输出到客户端，该管道输入是 STDOUT。接着关闭所有管道，等待子进程结束。这一部分比较乱，见下图说明：
 
+![image](https://user-images.githubusercontent.com/81791654/166947375-dc108274-083e-4ee1-b131-400f95a177ba.png)
 
 
 
 
-## 学习目录：
+
+## 基础知识：
 
 [1、Html介绍](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/Html)
 
