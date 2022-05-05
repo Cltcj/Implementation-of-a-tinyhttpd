@@ -39,14 +39,54 @@ struct sockaddr
 };
 ```
 
+&emsp;&emsp;使用 sudo grep -r "struct sockaddr_in {" /usr 命令可查看到 struct sockaddr_in 结构体的定义。一般其默认的存 储位置：/usr/include/linux/in.h 文件中
 
+```c
+struct sockaddr_in { 
+     __kernel_sa_family_t sin_family; /* Address family */ 地址结构类型 
+     __be16 sin_port; /* Port number */ 端口号 
+     struct in_addr sin_addr; /* Internet address */ IP 地址 
+     /* Pad to size of `struct sockaddr'. */ 
+     unsigned char __pad[__SOCK_SIZE__ - sizeof(short int) - 
+     sizeof(unsigned short int) - sizeof(struct in_addr)]; 
+};
+struct in_addr { /* Internet address. */ 
+     __be32 s_addr; 
+};
 
+struct sockaddr_in6 { 
+     unsigned short int sin6_family; /* AF_INET6 */ 
+     __be16 sin6_port; /* Transport layer port # */ 
+     __be32 sin6_flowinfo; /* IPv6 flow information */ 
+     struct in6_addr sin6_addr; /* IPv6 address */ 
+     __u32 sin6_scope_id; /* scope id (new in RFC2553) */ 
+};
 
+struct in6_addr { 
+     union { 
+          __u8 u6_addr8[16]; 
+          __be16 u6_addr16[8]; 
+          __be32 u6_addr32[4]; 
+     } in6_u; 
+     #define s6_addr     in6_u.u6_addr8 
+     #define s6_addr16   in6_u.u6_addr16 
+     #define s6_addr32   in6_u.u6_addr32 
+};
 
+#define UNIX_PATH_MAX 108 
+struct sockaddr_un { 
+     __kernel_sa_family_t sun_family; /* AF_UNIX */ 
+     char sun_path[UNIX_PATH_MAX]; /* pathname */ 
+};
 
+```
 
+&emsp;&emsp;IPv4 和 IPv6 的地址格式定义在 netinet/in.h 中，IPv4 地址用 sockaddr_in 结构体表示，包括 16 位端口号和 32 位 IP 地址，IPv6 地址用 sockaddr_in6 结构体表示，包括 16 位端口号、128 位 IP 地址和一些控制字段。UNIX Domain Socket 的地址格式定义在 sys/un.h 中，用 sock-addr_un 结构体表示。各种 socket 地址结构体的开头都是相同的，前 16 位 表示整个结构体的长度（并不是所有 UNIX 的实现都有长度字段，如 Linux 就没有），后 16 位表示地址类型。IPv4、 IPv6 和 Unix Domain Socket 的地址类型分别定义为常数 AF_INET、AF_INET6、AF_UNIX。这样，只要取得某种 sockaddr 结构体的首地址，不需要知道具体是哪种类型的 sockaddr 结构体，就可以根据地址类型字段确定结构体中的内容。 因此，socket API 可以接受各种类型的 sockaddr 结构体指针做参数，例如 bind、accept、connect 等函数，这些函数 的参数应该设计成 `void *`类型以便接受各种类型的指针，但是 **sock API 的实现早于 ANSI C 标准化，那时还没有 `void *` 类型**，**因此这些函数的参数都用 `struct sockaddr *`类型表示，在传递参数之前要强制类型转换一下**，例如：
 
-
+```c
+struct sockaddr_in servaddr; 
+bind(listen_fd, (struct sockaddr *)&servaddr, sizeof(servaddr)); /* initialize servaddr */
+```
 
 
 
@@ -93,3 +133,4 @@ void pthread_exit(void *retval);
 &emsp;&emsp;在线程中禁止调用 **exit** 函数，否则会导致整个进程退出，取而代之的是调用 **pthread_exit** 函数，这个函数是使一个线程退出，如果主线程调用 **pthread_exit** 函数也不会使整个进程退出，不影响其他线程的执行。
 
 **NOTE：pthread_exit或者return返回的指针所指向的内存单元必须是全局的或者是用malloc分配的，不能在线程函数的栈上分配，因为当其它线程得到这个返回指针时线程函数已经退出了，栈空间就会被回收。**
+
