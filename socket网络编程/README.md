@@ -172,6 +172,71 @@ backlog:
 
 &emsp;&emsp;典型的服务器程序可以同时服务于多个客户端，当有客户端发起连接时，服务器调用的accept()返回并接受这个连接，如果有大量的客户端发起连接而服务器来不及处理，尚未accept的客户端就处于连接等待状态，listen()声明sockfd处于监听状态，并且最多允许有backlog个客户端处于连接待状态，如果接收到更多的连接请求就忽略。listen()成功返回0，失败返回-1。
 
+### accept函数
+
+```c
+#include <sys/types.h> 		/* See NOTES */
+#include <sys/socket.h>
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+sockdf:
+	socket文件描述符
+addr:
+	传出参数，返回链接客户端地址信息，含IP地址和端口号
+addrlen:
+	传入传出参数（值-结果）,传入sizeof(addr)大小，函数返回时返回真正接收到地址结构体的大小
+返回值：
+	成功返回一个新的socket文件描述符，用于和客户端通信，失败返回-1，设置errno
+```
+
+&emsp;&emsp;三方握手完成后，服务器调用accept()接受连接，如果服务器调用accept()时还没有客户端的连接请求，就阻塞等待直到有客户端连接上来。addr是一个传出参数，accept()返回时传出客户端的地址和端口号。addrlen参数是一个传入传出参数（value-result argument），传入的是调用者提供的缓冲区addr的长度以避免缓冲区溢出问题，传出的是客户端地址结构体的实际长度（有可能没有占满调用者提供的缓冲区）。如果给addr参数传NULL，表示不关心客户端的地址。
+
+&emsp;&emsp;一个简单服务器程序结构是这样的：
+
+```c
+while (1) {
+	cliaddr_len = sizeof(cliaddr);
+	connfd = accept(listenfd, (struct sockaddr *)&cliaddr, &cliaddr_len);
+	n = read(connfd, buf, MAXLINE);
+	......
+	close(connfd);
+}
+```
+
+&emsp;&emsp;整个是一个while死循环，每次循环处理一个客户端连接。由于cliaddr_len是传入传出参数，每次调用accept()之前应该重新赋初值。accept()的参数listenfd是先前的监听文件描述符，而accept()的返回值是另外一个文件描述符connfd，之后与客户端之间就通过这个connfd通讯，最后关闭connfd断开连接，而不关闭listenfd，再次回到循环开头listenfd仍然用作accept的参数。accept()成功返回一个文件描述符，出错返回-1。
+
+### connect函数
+
+```c
+#include <sys/types.h> 					/* See NOTES */
+#include <sys/socket.h>
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+sockdf:
+	socket文件描述符
+addr:
+	传入参数，指定服务器端地址信息，含IP地址和端口号
+addrlen:
+	传入参数,传入sizeof(addr)大小
+返回值：
+	成功返回0，失败返回-1，设置errno
+```
+
+&emsp;&emsp;客户端需要调用connect()连接服务器，connect和bind的参数形式一致，区别在于bind的参数是自己的地址，而connect的参数是对方的地址。connect()成功返回0，出错返回-1。
+
+## C/S模型-TCP
+
+&emsp;&emsp;下图是基于TCP协议的客户端/服务器程序的一般流程：
+
+![image](https://user-images.githubusercontent.com/81791654/166941670-39876b3f-1f61-4d63-9729-7e707a7d14d3.png)
+
+&emsp;&emsp;服务器调用socket()、bind()、listen()完成初始化后，调用accept()阻塞等待，处于监听端口的状态，客户端调用socket()初始化后，调用connect()发出SYN段并阻塞等待服务器应答，服务器应答一个SYN-ACK段，客户端收到后从connect()返回，同时应答一个ACK段，服务器收到后从accept()返回。
+
+数据传输的过程：
+
+&emsp;&emsp;建立连接后，TCP协议提供全双工的通信服务，但是一般的客户端/服务器程序的流程是由客户端主动发起请求，服务器被动处理请求，一问一答的方式。因此，服务器从accept()返回后立刻调用read()，读socket就像读管道一样，如果没有数据到达就阻塞等待，这时客户端调用write()发送请求给服务器，服务器收到后从read()返回，对客户端的请求进行处理，在此期间客户端调用read()阻塞等待服务器的应答，服务器调用write()将处理结果发回给客户端，再次调用read()阻塞等待下一条请求，客户端收到后从read()返回，发送下一条请求，如此循环下去。
+
+&emsp;&emsp;如果客户端没有更多的请求了，就调用close()关闭连接，就像写端关闭的管道一样，服务器的read()返回0，这样服务器就知道客户端关闭了连接，也调用close()关闭连接。注意，任何一方调用close()后，连接的两个传输方向都关闭，不能再发送数据了。如果一方调用shutdown()则连接处于半关闭状态，仍可接收对方发来的数据。
+
+&emsp;&emsp;在学习socket API时要注意应用程序和TCP协议层是如何交互的： 应用程序调用某个socket函数时TCP协议层完成什么动作，比如调用connect()会发出SYN段 应用程序如何知道TCP协议层的状态变化，比如从某个阻塞的socket函数返回就表明TCP协议收到了某些段，再比如read()返回0就表明收到了FIN段
 
 
 
