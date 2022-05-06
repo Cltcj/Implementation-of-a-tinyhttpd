@@ -85,15 +85,17 @@ pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`
      
 这里需要了解http协议的格式：
 
-http协议分成两个大的部分，一个是请求，一个是相应。无论是请求还是相应都包含两个部分，一个是header，另外一个是body。（body可选）
+http协议分成两个大的部分，一个是请求，一个是响应。无论是请求还是相应都包含两个部分，一个是header，另外一个是body。（body可选）
+
 每个Header一行一个，换行符是\r\n。当连续遇到两个\r\n时，Header部分结束，后面的数据全部是Body。
+
 Body的数据类型由Content-Type头来确定，如果是网页，Body就是文本，如果是图片，Body就是图片的二进制数据。
 
 如下图（[来源于](https://www.jianshu.com/p/f5a5db039737)）：
 
 ![image](https://user-images.githubusercontent.com/81791654/167098578-c9c13d6e-fbb4-4eac-9f24-5d07fbba9ce3.png)
 
-具体为：得到一行数据,只要读到为 `\n`时 ,就认为是一行结束，如果读到 `\r`时 ,再用 `MSG_PEEK` 的方式读入一个字符，如果是 `\n`，从 `socket` 用读出
+所以get_line()的功能是：得到一行数据,只要读到为 `\n`时 ,就认为是一行结束，如果读到 `\r`时 ,再用 `MSG_PEEK` 的方式读入一个字符，如果是 `\n`，从 `socket` 读出
 
 ```c
 //解析一行http报文
@@ -111,6 +113,7 @@ int get_line(int sock, char *buf, int size)
 		{
 			if (c == '\r')
 			{
+				// 把flags设置为MSG_PEEK时,仅把tcp buffer中的数据读取到buf中，并不把已读取的数据从tcp buffer中移除。
 				n = recv(sock, &c, 1, MSG_PEEK);
 				if ((n > 0) && (c == '\n'))
 					recv(sock, &c, 1, 0);
@@ -128,109 +131,111 @@ int get_line(int sock, char *buf, int size)
 	buf[i] = '\0';
 	return (i);
 }
+//如果没有在缓存中找到换行符，则该字符串以null结尾，如果读取了终止符中的任何一个，字符串的最后一个字符将是换行符(\n)，并且字符串以null字符结束，所以在函数的最后`buf[i] = ‘\0’`
 ```
-     
+
+
+      （5）取出 HTTP 请求中的 method (GET 或 POST) 和 url,。对于 GET 方法，如果有携带参数，则 query_string 指针指向 url 中 ？ 后面的 GET 参数。   
          
 ```c
-//处理从套接字上监听到的一个 HTTP 请求
-void *accept_request(void *tclient)
+
+//接收客户端的http请求报文
+//接收字符处理：提取空格字符前的字符，至多254个
+while (!ISspace(buf[j]) && (i < sizeof(method) - 1))
 {
-	int client = *(int *)tclient;
-	char buf[1024];
-	int numchars;
-	char method[255];
-	char url[255];
-	char path[512];
-	size_t i, j;
-	struct stat st;
-	int cgi = 0;
-	char* query_string = NULL;
-	numchars = get_line(client, buf, sizeof(buf));
-	//读取一行http请求到buf中
-	i = 0;
-	j = 0;
-	while (!ISspace(buf[j]) && (i < sizeof(method) - 1))
-	{
-		method[i] = buf[j];
-		i++;
-		j++;
-	}
-	method[i] = '\0';//给method增加一个结尾
-	if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
-	{
-		unimplemented(client);
-		return NULL;
-	}
+	method[i] = buf[j];//根据http请求报文格式，这里得到的是请求方法
+	i++;
+	j++;
+}
+method[i] = '\0';//给method增加一个结尾
 
-	//如果是post激活cgi
-	if (strcasecmp(method, "POST") == 0)
-		cgi = 1;
-
-	//不管get还是post，都要进行读取url地址
-	i = 0;//处理空字符
-	while (ISspace(buf[j]) && (j < sizeof(buf)))
-		j++;
-	//继续读取request-URL
-	while (!ISspace(buf[j]) && (i < sizeof(url) - 1) && (j < sizeof(buf)))
-	{
-		url[i] = buf[j];
-		i++;
-		j++;
-	}
-	url[i] = '\0';
-
-	if (strcasecmp(method, "GET") == 0)
-	{
-		query_string = url;
-		while ((*query_string != '?') && (*query_string != '\0'))
-			query_string++;
-		if (*query_string == '?')//带?需要激活cgi
-		{
-			cgi = 1;//需要执行cgi，解析参数，设置标志位为1
-			//将解析参数截取下来
-			*query_string = '\0';//这里变成url结尾
-			query_string++;//query_string作为剩下的起点
-		}
-	}
-	//以上已经将起始行解析完毕
-
-	//url中的路径格式化到path
-	sprintf(path, "httpdocs%s", url);//把url添加到htdocs后赋值给path
-	if (path[strlen(path) - 1] == '/')//如果是以/结尾，需要把index.html添加到后面
-		//以/结尾，说明path只是一个目录，此时需要设置为首页index.html
-		strcat(path, "test.html");//strcat连接两个字符串
-	if (stat(path, &st) == -1)//执行成功则返回0，失败返回-1
-	{//如果不存在，那么读取剩下的请求行内容丢弃
-		while ((numchars > 0) && strcmp("\n", buf)) /* read & discard headers */
-			numchars = get_line(client, buf, sizeof(buf));
-		not_found(client);//调用错误代码404
-	}
-	else
-	{
-		if ((st.st_mode & S_IFMT) == S_IFDIR)//mode_t     st_mode;表示文件对应的模式，文件，目录等，做与运算能得到结果
-			strcat(path, "/test.html");//如果是目录，显示index.html这里和前面是否重复？
-		if ((st.st_mode & S_IXUSR) ||
-			(st.st_mode & S_IXGRP) ||
-			(st.st_mode & S_IXOTH))//IXUSR X可执行，R读，W写，USR用户,GRP用户组，OTH其他用户
-			cgi = 1;
-
-		if (!cgi)//如果不是cgi,直接返回
-			serve_file(client, path);
-		else
-			execute_cgi(client, path, method, query_string);//是的话，执行cgi
-	}
-
-	close(client);
+//忽略大小写比较字符串，判断使用的是那种请求方法
+if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
+{
+	unimplemented(client); //既不是POST也不是GET，告知客户端所请求的方法未能实现
 	return NULL;
 }
+
+//如果是post激活cgi
+if (strcasecmp(method, "POST") == 0)
+	cgi = 1;
+
+//不管get还是post，都要进行读取url地址
+i = 0;//处理空字符
+while (ISspace(buf[j]) && (j < sizeof(buf)))
+	j++;
+//继续读取request-URL
+while (!ISspace(buf[j]) && (i < sizeof(url) - 1) && (j < sizeof(buf)))
+{
+	url[i] = buf[j];//得到URL
+	i++;
+	j++;
+}
+url[i] = '\0';
+
+//如果方法是get
+if (strcasecmp(method, "GET") == 0)
+{
+	query_string = url;// query_string 指针指向 url 中 ？ 后面的 GET 参数
+	while ((*query_string != '?') && (*query_string != '\0'))
+		query_string++;
+	if (*query_string == '?')//带?需要激活cgi
+	{
+		cgi = 1;//需要执行cgi，解析参数，设置标志位为1
+		//将解析参数截取下来
+		*query_string = '\0';//这里变成url结尾
+		query_string++;//query_string作为剩下的起点
+	}
+}
+//以上已经将起始行解析完毕
 ```
-     
 
-     （3）取出 HTTP 请求中的 method (GET 或 POST) 和 url,。对于 GET 方法，如果有携带参数，则 query_string 指针指向 url 中 ？ 后面的 GET 参数。
+     （6） 格式化 url 到 path 数组，表示浏览器请求的服务器文件路径，在 tinyhttpd 中服务器文件是在 htdocs 文件夹下。当 url 以 / 结尾，或 url 是个目录，则默认在 path 中加上 test.html，表示访问主页。
 
-     （4） 格式化 url 到 path 数组，表示浏览器请求的服务器文件路径，在 tinyhttpd 中服务器文件是在 htdocs 文件夹下。当 url 以 / 结尾，或 url 是个目录，则默认在 path 中加上 index.html，表示访问主页。
+```c
+//url中的路径格式化到path
+sprintf(path, "httpdocs%s", url);//把url添加到htdocs后赋值给path
+if (path[strlen(path) - 1] == '/')//如果是以/结尾，需要把test.html添加到后面
+	//以/结尾，说明path只是一个目录，此时需要设置为首页test.html
+	strcat(path, "test.html");//strcat连接两个字符串
+```
+
 
      （5）如果文件路径合法，对于无参数的 GET 请求，直接输出服务器文件到浏览器，即用 HTTP 格式写到套接字上，跳到（10）。其他情况（带参数 GET，POST 方式，url 为可执行文件），则调用 excute_cgi 函数执行 cgi 脚本。
+
+```c
+if (!cgi)//如果不是cgi,直接返回
+	serve_file(client, path);
+else
+	execute_cgi(client, path, method, query_string);//是的话，执行cgi
+```
+
+```c
+void serve_file(int client, const char *filename)//调用 cat 把服务器文件内容返回给浏览器客户端。
+{
+	FILE *resource = NULL;
+	int numchars = 1;
+	char buf[1024];
+	buf[0] = 'A'; buf[1] = '\0';
+	while ((numchars > 0) && strcmp("\n", buf))//读取HTTP请求头并丢弃
+		numchars = get_line(client, buf, sizeof(buf));
+	resource = fopen(filename, "r");//只读打开
+	if (resource == NULL)
+		//如果文件不存在，则返回not_found
+		not_found(client);
+	else
+	{
+		//添加HTTP头
+		headers(client, filename);
+		//并发送文件内容
+		cat(client, resource);
+	}
+	fclose(resource);//关闭文件句柄
+}
+```
+
+
+
 
     （6）读取整个 HTTP 请求并丢弃，如果是 POST 则找出 Content-Length. 把 HTTP 200  状态码写到套接字。
 
