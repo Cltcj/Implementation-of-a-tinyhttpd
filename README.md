@@ -4,7 +4,7 @@
 
 ![image](https://user-images.githubusercontent.com/81791654/166947375-dc108274-083e-4ee1-b131-400f95a177ba.png)
 
-&emsp;&emsp;这个项目很简单，它是对tinyhttpd的复现，以及改进
+这个项目很简单，它是用来学习如何制作一个[tinyhttpd](https://sourceforge.net/projects/tinyhttpd/)，以及对tinyhttpd的改进
 
 实现一个web服务器：
 
@@ -19,7 +19,7 @@
 ![image](https://user-images.githubusercontent.com/81791654/166148072-c0a21e3d-528d-4e4e-ba86-2a8ff0ec3aa1.png)
 
 
-工作流程：
+**具体流程：**
 
 * 1.服务器启动，在指定端口或随机选取端口绑定 httpd 服务。
      
@@ -335,3 +335,6 @@ else {
 [2、http 超文本传输协议](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/Html)
 
 [3、socket 网络编程](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/socket%E7%BD%91%E7%BB%9C%E7%BC%96%E7%A8%8B)
+
+[4、项目代码](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/tinyhttpd1.0)
+
