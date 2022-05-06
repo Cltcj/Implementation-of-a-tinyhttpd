@@ -69,19 +69,27 @@ int startup(u_short *port)
 ```
 
      （2）服务器调用accept()接受连接，accept()返回时传出客户端的地址和端口号。
-     ```c
-     client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);
-     ``` 
+```c
+client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);
+``` 
      
      （3）循环创建新线程用accept_request()函数处理请求
-     ```c
-     pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`
-     //newthread传出参数，保存系统为我们分配好的线程ID,client_sock为向线程函数accept_request传递的参数。
-     ```
+```c
+pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`
+//newthread传出参数，保存系统为我们分配好的线程ID,client_sock为向线程函数accept_request传递的参数。
+```
      
      （4）调用get_line()解析一行http报文
      
      `numchars = get_line(client, buf, sizeof(buf));`
+     
+     这里需要了解http协议的格式：
+     
+     http协议分成两个大的部分，一个是请求，一个是相应。无论是请求还是相应都包含两个部分，一个是header，另外一个是body。（body可选）
+     每个Header一行一个，换行符是\r\n。当连续遇到两个\r\n时，Header部分结束，后面的数据全部是Body。
+     Body的数据类型由Content-Type头来确定，如果是网页，Body就是文本，如果是图片，Body就是图片的二进制数据。
+     
+     如下图（[来源于](https://www.jianshu.com/p/f5a5db039737)）：
      
      ![image](https://user-images.githubusercontent.com/81791654/167098578-c9c13d6e-fbb4-4eac-9f24-5d07fbba9ce3.png)
 
