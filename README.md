@@ -15,19 +15,16 @@
 ![image](https://user-images.githubusercontent.com/81791654/166148072-c0a21e3d-528d-4e4e-ba86-2a8ff0ec3aa1.png)
 
 
-
-
-
-
-
-
-
-
 工作流程：
 
      （1） 服务器启动，在指定端口或随机选取端口绑定 httpd 服务。
      
-     即:`server_sock = startup(&port);`//如果此时port是指定了且不为0的就调用startup()函数动态创建套接字
+     即:`server_sock = startup(&port);`//如果此时port为0的就需要动态创建套接字
+     ① 调用socket()打开一个网络通讯端口（文件描述符）。
+     ② 调用setsockopt()设置端口复用。
+     ③ 服务器调用bind()绑定一个固定的网络地址和端口号。
+     ④ 如果端口号为0，调用getsockname()获取一个本地端口。
+     ⑤ 调用listen()进行监听。
      
 ```c
 //开启http服务，包括绑定端口，监听，开启线程处理链接
@@ -71,7 +68,106 @@ int startup(u_short *port)
 }
 ```
 
-     （2）收到一个 HTTP 请求时（其实就是 listen 的端口 accpet 的时候），派生一个线程运行 accept_request 函数。
+     （2）服务器调用accept()接受连接，accept()返回时传出客户端的地址和端口号。
+     即`client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);` 
+     
+     （3）循环创建新线程用accept_request()函数处理请求
+     即`pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`//newthread传出参数，保存系统为我们分配好的线程ID,client_sock为向线程函数accept_request传递的参数。
+         
+```c
+//处理从套接字上监听到的一个 HTTP 请求
+void *accept_request(void *tclient)
+{
+	int client = *(int *)tclient;
+	char buf[1024];
+	int numchars;
+	char method[255];
+	char url[255];
+	char path[512];
+	size_t i, j;
+	struct stat st;
+	int cgi = 0;
+	char* query_string = NULL;
+	numchars = get_line(client, buf, sizeof(buf));
+	//读取一行http请求到buf中
+	i = 0;
+	j = 0;
+	while (!ISspace(buf[j]) && (i < sizeof(method) - 1))
+	{
+		method[i] = buf[j];
+		i++;
+		j++;
+	}
+	method[i] = '\0';//给method增加一个结尾
+	if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
+	{
+		unimplemented(client);
+		return NULL;
+	}
+
+	//如果是post激活cgi
+	if (strcasecmp(method, "POST") == 0)
+		cgi = 1;
+
+	//不管get还是post，都要进行读取url地址
+	i = 0;//处理空字符
+	while (ISspace(buf[j]) && (j < sizeof(buf)))
+		j++;
+	//继续读取request-URL
+	while (!ISspace(buf[j]) && (i < sizeof(url) - 1) && (j < sizeof(buf)))
+	{
+		url[i] = buf[j];
+		i++;
+		j++;
+	}
+	url[i] = '\0';
+
+	if (strcasecmp(method, "GET") == 0)
+	{
+		query_string = url;
+		while ((*query_string != '?') && (*query_string != '\0'))
+			query_string++;
+		if (*query_string == '?')//带?需要激活cgi
+		{
+			cgi = 1;//需要执行cgi，解析参数，设置标志位为1
+			//将解析参数截取下来
+			*query_string = '\0';//这里变成url结尾
+			query_string++;//query_string作为剩下的起点
+		}
+	}
+	//以上已经将起始行解析完毕
+
+	//url中的路径格式化到path
+	sprintf(path, "httpdocs%s", url);//把url添加到htdocs后赋值给path
+	if (path[strlen(path) - 1] == '/')//如果是以/结尾，需要把index.html添加到后面
+		//以/结尾，说明path只是一个目录，此时需要设置为首页index.html
+		strcat(path, "test.html");//strcat连接两个字符串
+	if (stat(path, &st) == -1)//执行成功则返回0，失败返回-1
+	{//如果不存在，那么读取剩下的请求行内容丢弃
+		while ((numchars > 0) && strcmp("\n", buf)) /* read & discard headers */
+			numchars = get_line(client, buf, sizeof(buf));
+		not_found(client);//调用错误代码404
+	}
+	else
+	{
+		if ((st.st_mode & S_IFMT) == S_IFDIR)//mode_t     st_mode;表示文件对应的模式，文件，目录等，做与运算能得到结果
+			strcat(path, "/test.html");//如果是目录，显示index.html这里和前面是否重复？
+		if ((st.st_mode & S_IXUSR) ||
+			(st.st_mode & S_IXGRP) ||
+			(st.st_mode & S_IXOTH))//IXUSR X可执行，R读，W写，USR用户,GRP用户组，OTH其他用户
+			cgi = 1;
+
+		if (!cgi)//如果不是cgi,直接返回
+			serve_file(client, path);
+		else
+			execute_cgi(client, path, method, query_string);//是的话，执行cgi
+	}
+
+	close(client);
+	return NULL;
+}
+```
+     
 
      （3）取出 HTTP 请求中的 method (GET 或 POST) 和 url,。对于 GET 方法，如果有携带参数，则 query_string 指针指向 url 中 ？ 后面的 GET 参数。
 
