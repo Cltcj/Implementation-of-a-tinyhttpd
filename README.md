@@ -83,17 +83,17 @@ pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`
      
      `numchars = get_line(client, buf, sizeof(buf));`
      
-     这里需要了解http协议的格式：
-     
-     http协议分成两个大的部分，一个是请求，一个是相应。无论是请求还是相应都包含两个部分，一个是header，另外一个是body。（body可选）
-     每个Header一行一个，换行符是\r\n。当连续遇到两个\r\n时，Header部分结束，后面的数据全部是Body。
-     Body的数据类型由Content-Type头来确定，如果是网页，Body就是文本，如果是图片，Body就是图片的二进制数据。
-     
-     如下图（[来源于](https://www.jianshu.com/p/f5a5db039737)）：
-     
-     ![image](https://user-images.githubusercontent.com/81791654/167098578-c9c13d6e-fbb4-4eac-9f24-5d07fbba9ce3.png)
+这里需要了解http协议的格式：
 
-     具体为：得到一行数据,只要读到为 `\n`时 ,就认为是一行结束，如果读到 `\r`时 ,再用 `MSG_PEEK` 的方式读入一个字符，如果是 `\n`，从 `socket` 用读出
+http协议分成两个大的部分，一个是请求，一个是相应。无论是请求还是相应都包含两个部分，一个是header，另外一个是body。（body可选）
+每个Header一行一个，换行符是\r\n。当连续遇到两个\r\n时，Header部分结束，后面的数据全部是Body。
+Body的数据类型由Content-Type头来确定，如果是网页，Body就是文本，如果是图片，Body就是图片的二进制数据。
+
+如下图（[来源于](https://www.jianshu.com/p/f5a5db039737)）：
+
+![image](https://user-images.githubusercontent.com/81791654/167098578-c9c13d6e-fbb4-4eac-9f24-5d07fbba9ce3.png)
+
+具体为：得到一行数据,只要读到为 `\n`时 ,就认为是一行结束，如果读到 `\r`时 ,再用 `MSG_PEEK` 的方式读入一个字符，如果是 `\n`，从 `socket` 用读出
 
 ```c
 //解析一行http报文
