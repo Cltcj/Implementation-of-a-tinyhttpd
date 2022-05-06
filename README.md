@@ -17,7 +17,7 @@
 
 工作流程：
 
-     （1） 服务器启动，在指定端口或随机选取端口绑定 httpd 服务。
+* 1.服务器启动，在指定端口或随机选取端口绑定 httpd 服务。
      
      即:`server_sock = startup(&port);`//如果此时port为0的就需要动态创建套接字
      ① 调用socket()打开一个网络通讯端口（文件描述符）。
@@ -68,20 +68,22 @@ int startup(u_short *port)
 }
 ```
 
-     （2）服务器调用accept()接受连接，accept()返回时传出客户端的地址和端口号。
+* 2.服务器调用accept()接受连接，accept()返回时传出客户端的地址和端口号。
+
 ```c
 client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);
 ``` 
      
-     （3）循环创建新线程用accept_request()函数处理请求
+* 3.循环创建新线程用accept_request()函数处理请求
+
 ```c
 pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`
 //newthread传出参数，保存系统为我们分配好的线程ID,client_sock为向线程函数accept_request传递的参数。
 ```
      
-     （4）调用get_line()解析一行http报文
+* 4.调用get_line()解析一行http报文
      
-     `numchars = get_line(client, buf, sizeof(buf));`
+`numchars = get_line(client, buf, sizeof(buf));`
      
 这里需要了解http协议的格式：
 
@@ -135,7 +137,7 @@ int get_line(int sock, char *buf, int size)
 ```
 
 
-      （5）取出 HTTP 请求中的 method (GET 或 POST) 和 url,。对于 GET 方法，如果有携带参数，则 query_string 指针指向 url 中 ？ 后面的 GET 参数。   
+* 5.取出 HTTP 请求中的 method (GET 或 POST) 和 url,。对于 GET 方法，如果有携带参数，则 query_string 指针指向 url 中 ？ 后面的 GET 参数。   
          
 ```c
 
@@ -190,7 +192,7 @@ if (strcasecmp(method, "GET") == 0)
 //以上已经将起始行解析完毕
 ```
 
-     （6） 格式化 url 到 path 数组，表示浏览器请求的服务器文件路径，在 tinyhttpd 中服务器文件是在 htdocs 文件夹下。当 url 以 / 结尾，或 url 是个目录，则默认在 path 中加上 test.html，表示访问主页。
+* 6.格式化 url 到 path 数组，表示浏览器请求的服务器文件路径，在 tinyhttpd 中服务器文件是在 htdocs 文件夹下。当 url 以 / 结尾，或 url 是个目录，则默认在 path 中加上 test.html，表示访问主页。
 
 ```c
 //url中的路径格式化到path
@@ -201,7 +203,7 @@ if (path[strlen(path) - 1] == '/')//如果是以/结尾，需要把test.html添�
 ```
 
 
-     （5）如果文件路径合法，对于无参数的 GET 请求，直接输出服务器文件到浏览器，即用 HTTP 格式写到套接字上，跳到（10）。其他情况（带参数 GET，POST 方式，url 为可执行文件），则调用 excute_cgi 函数执行 cgi 脚本。
+* 7.如果文件路径合法，对于无参数的 GET 请求，直接输出服务器文件到浏览器，即用 HTTP 格式写到套接字上。其他情况（带参数 GET，POST 方式，url 为可执行文件），则调用 excute_cgi 函数执行 cgi 脚本。
 
 ```c
 if (!cgi)//如果不是cgi,直接返回
