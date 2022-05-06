@@ -1,5 +1,9 @@
 # Implementation-of-a-tinyhttpd
 
+**tinyhttpd全流程图：**
+
+![image](https://user-images.githubusercontent.com/81791654/166947375-dc108274-083e-4ee1-b131-400f95a177ba.png)
+
 &emsp;&emsp;这个项目很简单，它是对tinyhttpd的复现，以及改进
 
 实现一个web服务器：
@@ -203,138 +207,122 @@ if (path[strlen(path) - 1] == '/')//如果是以/结尾，需要把test.html添�
 ```
 
 
-* 7.如果文件路径合法，对于无参数的 GET 请求，直接输出服务器文件到浏览器，即用 HTTP 格式写到套接字上。其他情况（带参数 GET，POST 方式，url 为可执行文件），则调用 excute_cgi 函数执行 cgi 脚本。
+* 7.如果文件路径合法，对于无参数的 GET 请求，直接输出服务器文件到浏览器，即用 HTTP 格式写到套接字上，然后跳到（11）。其他情况（带参数 GET，POST 方式，url 为可执行文件），则调用 excute_cgi 函数执行 cgi 脚本。
 
 ```c
 if (!cgi)//如果不是cgi,直接返回
-	serve_file(client, path);
+	serve_file(client, path);//跳到11，结束
 else
-	execute_cgi(client, path, method, query_string);//是的话，执行cgi
+	execute_cgi(client, path, method, query_string);//执行cgi
 ```
 
+
+* 8.执行CGI脚本-->读取整个 HTTP 请求并丢弃，如果是 POST 则找出 Content-Length. 把 HTTP 200  状态码写到套接字。
+
 ```c
-void serve_file(int client, const char *filename)//调用 cat 把服务器文件内容返回给浏览器客户端。
+if (strcasecmp(method, "GET") == 0)//get，一般用于获取/查询资源信息
 {
-	FILE *resource = NULL;
-	int numchars = 1;
-	char buf[1024];
-	buf[0] = 'A'; buf[1] = '\0';
-	while ((numchars > 0) && strcmp("\n", buf))//读取HTTP请求头并丢弃
-		numchars = get_line(client, buf, sizeof(buf));
-	resource = fopen(filename, "r");//只读打开
-	if (resource == NULL)
-		//如果文件不存在，则返回not_found
-		not_found(client);
-	else
-	{
-		//添加HTTP头
-		headers(client, filename);
-		//并发送文件内容
-		cat(client, resource);
+	while (numchars > 0 && strcmp("\n", buf)) {//读取并丢弃头部信息
+		numchars = get_line(client, buf, sizeof(buf));//从客户端读取
 	}
-	fclose(resource);//关闭文件句柄
+}
+else {//POST方法，一般用于更新资源信息
+	numchars = get_line(client, buf, sizeof(buf));
+	//获取HTTP消息实体的传输长度
+	while (numchars > 0 && strcmp("\n", buf)) {//不为空，且不为换行符
+		buf[15] = '\0';
+		if (strcasecmp(buf, "Content-Length") == 0) {//如果是Content_Length字段
+			content_length = atoi(&(buf[16]));//找到content-length长度用于描述HTTP消息实体
+		}
+		numchars = get_line(client, buf, sizeof(buf));
+	}
+	if (content_length == -1) {
+		bad_request(client);//请求的页面数据为空，没有数据
+		return;
+	}
+}
+//写
+sprintf(buf, "HTTP/1.0 200 OK\r\n");
+send(client, buf, strlen(buf), 0);
+```
+
+* 9.建立两个管道，cgi_input 和 cgi_output,（fd[0]:读入端，fd[1]:写入端） 并 fork 一个进程。
+
+```c
+if (pipe(cgi_output) < 0) {
+	cannot_execute(client);//500
+	return;
+}
+if (pipe(cgi_input) < 0) {
+	cannot_execute(client);
+	return;
+}
+//成功建立管道
+
+//fork子进程，这样创建了父子进程间的IPC(进程间通信)通道
+if ((pid = fork()) < 0) {
+	//子进程创建失败
+	cannot_execute(client);
+	return;
 }
 ```
 
-* 8.读取整个 HTTP 请求并丢弃，如果是 POST 则找出 Content-Length. 把 HTTP 200  状态码写到套接字。
+
+* 10.在子进程中，把 STDOUT 重定向到 cgi_output 的写入端，把 STDIN 重定向到 cgi_input 的读取端，关闭 cgi_input 的写入端 和 cgi_output 的读取端，设置 request_method 的环境变量，GET 的话设置 query_string 的环境变量，POST 的话设置 content_length 的环境变量，这些环境变量都是为了给 cgi 脚本调用，接着用 execl 运行 cgi 程序。
 
 ```c
-	if (strcasecmp(method, "GET") == 0)//get，直接丢弃?
-	{
-		while (numchars > 0 && strcmp("\n", buf)) {
-			numchars = get_line(client, buf, sizeof(buf));
-		}
+//进入子进程
+if (pid == 0) {
+	char meth_env[255];//设置request_method 的环境变量
+	char query_env[255];//GET 的话设置 query_string 的环境变量
+	char length_env[255];//POST 的话设置 content_length 的环境变量
+	dup2(cgi_output[1], 1);//这就是将标准输出重定向到output管道的写入端，也就是输出内容将会输出到output写入
+	dup2(cgi_input[0], 0);//将标准输入重定向到input读取端，也就是将从input[0]读内容到input缓冲
+	close(cgi_output[0]);//关闭output管道的的读取端
+	close(cgi_input[1]);//关闭input管道的写入端
+	sprintf(meth_env, "REQUEST_METHOD=%s", method);//把method保存到环境变量中
+	putenv(meth_env);//putenv函数的作用是增加环境变量
+	if (strcasecmp(method, "GET") == 0){//get
+		//设置query_string的环境变量
+		sprintf(query_env, "QUERY_STRING=%s", query_string);//存储query_string到query_env
+		putenv(query_env);
 	}
-	else {
-		numchars = get_line(client, buf, sizeof(buf));
-		while (numchars > 0 && strcmp("\n", buf)) {
-			buf[15] = '\0';
-			if (strcasecmp(buf, "Content-Length") == 0) {
-				content_length = atoi(&(buf[16]));//找到content-length长度
-			}
-			numchars = get_line(client, buf, sizeof(buf));
-		}
-		if (content_length == -1) {
-			bad_request(client);
-			return;
-		}
+	else {//post
+		//设置content_Length的环境变量
+		sprintf(length_env, "CONTENT_LENGTH=%d", content_length);//存储content_length到length_env
+		putenv(length_env);
 	}
-	//写
-	sprintf(buf, "HTTP/1.0 200 OK\r\n");
-	send(client, buf, strlen(buf), 0);
-```
-
-* 9.建立两个管道，cgi_input 和 cgi_output, 并 fork 一个进程。
-
-```c
-	if (pipe(cgi_output) < 0) {
-		cannot_execute(client);//500
-		return;
-	}
-	if (pipe(cgi_input) < 0) {
-		cannot_execute(client);
-		return;
-	}
-	//成功建立管道
-	if ((pid = fork()) < 0) {
-		//子进程创建失败
-		cannot_execute(client);
-		return;
-	}
-
-
-* 10.在子进程中，把 STDOUT 重定向到 cgi_outputt 的写入端，把 STDIN 重定向到 cgi_input 的读取端，关闭 cgi_input 的写入端 和 cgi_output 的读取端，设置 request_method 的环境变量，GET 的话设置 query_string 的环境变量，POST 的话设置 content_length 的环境变量，这些环境变量都是为了给 cgi 脚本调用，接着用 execl 运行 cgi 程序。
-	//进入子进程
-	if (pid == 0) {
-		char meth_env[255];//设置request_method 的环境变量
-		char query_env[255];//GET 的话设置 query_string 的环境变量
-		char length_env[255];//POST 的话设置 content_length 的环境变量
-		dup2(cgi_output[1], 1);//这就是将标准输出重定向到output管道的写入端，也就是输出内容将会输出到output写入
-		dup2(cgi_input[0], 0);//将标准输入重定向到input读取端，也就是将从input[0]读内容到input缓冲
-		close(cgi_output[0]);//关闭output管道的的读取端
-		close(cgi_input[1]);//关闭input管道的写入端
-		sprintf(meth_env, "REQUEST_METHOD=%s", method);//把method保存到环境变量中
-		putenv(meth_env);
-		if (strcasecmp(method, "GET") == 0){
-			sprintf(query_env, "QUERY_STRING=%s", query_string);//存储query_string到query_env
-			putenv(query_env);
-		}
-		else {
-			sprintf(length_env, "CONTENT_LENGTH=%d", content_length);//存储content_length到length_env
-			putenv(length_env);
-		}
-		execl(path, path, NULL);
-	}
-
-* 11.在父进程中，关闭 cgi_input 的读取端 和 cgi_output 的写入端，如果 POST 的话，把 POST 数据写入 cgi_input，已被重定向到 STDIN，读取 cgi_output 的管道输出到客户端，该管道输入是 STDOUT。接着关闭所有管道，等待子进程结束。这一部分比较乱，见下图说明：
-	else {
-		close(cgi_output[1]);	
-		close(cgi_input[0]);
-		if (strcasecmp(method, "POST") == 0) {
-			for (i = 0; i < content_length; i++) {
-				recv(client, &c, 1, 0);
-				write(cgi_input[1], &c, 1);
-			}
-		}
-		//依次发送给客户端
-		while (read(cgi_output[0], &c, 1) > 0) {
-			send(client, &c, 1, 0);
-		}
-		close(cgi_output[0]);//ouput的读
-		close(cgi_input[1]);//关闭input的写
-		waitpid(pid, &status, 0);//等待子进程中止
-	}
+	execl(path, path, NULL);//exec函数簇，执行cgi脚本，获取cgi的标准输出作为相应内容发送给客户端
 }
 ```
 
+* 11.在父进程中，关闭 cgi_input 的读取端 和 cgi_output 的写入端，如果 POST 的话，把 POST 数据写入 cgi_input，已被重定向到 STDIN，读取 cgi_output 的管道输出到客户端，该管道输入是 STDOUT。接着关闭所有管道，等待子进程结束。具体如：浏览器和tinyhttpd交互过程图
+
+
+![image](https://user-images.githubusercontent.com/81791654/167124868-3da08518-a0a7-40d7-9e14-2935e9e25d05.png)
+
+```c
+else {
+	close(cgi_output[1]);	
+	close(cgi_input[0]);
+	if (strcasecmp(method, "POST") == 0) {
+		for (i = 0; i < content_length; i++) {
+			recv(client, &c, 1, 0);
+			write(cgi_input[1], &c, 1);
+		}
+	}
+	//依次发送给客户端
+	while (read(cgi_output[0], &c, 1) > 0) {
+		send(client, &c, 1, 0);
+	}
+	close(cgi_output[0]);//ouput的读
+	close(cgi_input[1]);//关闭input的写
+	waitpid(pid, &status, 0);//等待子进程中止
+}
+```
+
+* 12.关闭与浏览器的连接。
 	
-
-
-
-
-
-
-![image](https://user-images.githubusercontent.com/81791654/166947375-dc108274-083e-4ee1-b131-400f95a177ba.png)
 
 
 
