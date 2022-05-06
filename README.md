@@ -69,10 +69,56 @@ int startup(u_short *port)
 ```
 
      （2）服务器调用accept()接受连接，accept()返回时传出客户端的地址和端口号。
+     
      即`client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);` 
      
      （3）循环创建新线程用accept_request()函数处理请求
+     
      即`pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`//newthread传出参数，保存系统为我们分配好的线程ID,client_sock为向线程函数accept_request传递的参数。
+     
+     （4）调用get_line()解析一行http报文
+     
+     `numchars = get_line(client, buf, sizeof(buf));`
+     
+     ![image](https://user-images.githubusercontent.com/81791654/167098578-c9c13d6e-fbb4-4eac-9f24-5d07fbba9ce3.png)
+
+     具体为：得到一行数据,只要读到为 `\n`时 ,就认为是一行结束，如果读到 `\r`时 ,再用 `MSG_PEEK` 的方式读入一个字符，如果是 `\n`，从 `socket` 用读出
+
+```c
+//解析一行http报文
+int get_line(int sock, char *buf, int size)
+{
+	int i = 0;//初始化起点
+	char c = '\0';//
+	int n;//用于记录成功读取的字符数目
+
+	while ((i < size - 1) && (c != '\n'))
+	{
+		//recv 的 flag 设为0，此时的recv函数读取tcp buffer中的数据到buf中
+		n = recv(sock, &c, 1, 0); //这里是一个字符一个字符的向外读
+		if (n>0)
+		{
+			if (c == '\r')
+			{
+				n = recv(sock, &c, 1, MSG_PEEK);
+				if ((n > 0) && (c == '\n'))
+					recv(sock, &c, 1, 0);
+				else
+					c = '\n';
+			}
+			buf[i] = c;//依次向后读
+			i++;
+		}
+		else
+			/*没有成功接收到字符，以换行符结尾，结束循环*/
+			c = '\n';
+	}
+	/*以空字符结尾，作为字符串*/
+	buf[i] = '\0';
+	return (i);
+}
+```
+     
          
 ```c
 //处理从套接字上监听到的一个 HTTP 请求
