@@ -236,16 +236,103 @@ void serve_file(int client, const char *filename)//调用 cat 把服务器文件
 }
 ```
 
+* 8.读取整个 HTTP 请求并丢弃，如果是 POST 则找出 Content-Length. 把 HTTP 200  状态码写到套接字。
+
+```c
+	if (strcasecmp(method, "GET") == 0)//get，直接丢弃?
+	{
+		while (numchars > 0 && strcmp("\n", buf)) {
+			numchars = get_line(client, buf, sizeof(buf));
+		}
+	}
+	else {
+		numchars = get_line(client, buf, sizeof(buf));
+		while (numchars > 0 && strcmp("\n", buf)) {
+			buf[15] = '\0';
+			if (strcasecmp(buf, "Content-Length") == 0) {
+				content_length = atoi(&(buf[16]));//找到content-length长度
+			}
+			numchars = get_line(client, buf, sizeof(buf));
+		}
+		if (content_length == -1) {
+			bad_request(client);
+			return;
+		}
+	}
+	//写
+	sprintf(buf, "HTTP/1.0 200 OK\r\n");
+	send(client, buf, strlen(buf), 0);
+```
+
+* 9.建立两个管道，cgi_input 和 cgi_output, 并 fork 一个进程。
+
+```c
+	if (pipe(cgi_output) < 0) {
+		cannot_execute(client);//500
+		return;
+	}
+	if (pipe(cgi_input) < 0) {
+		cannot_execute(client);
+		return;
+	}
+	//成功建立管道
+	if ((pid = fork()) < 0) {
+		//子进程创建失败
+		cannot_execute(client);
+		return;
+	}
+
+
+* 10.在子进程中，把 STDOUT 重定向到 cgi_outputt 的写入端，把 STDIN 重定向到 cgi_input 的读取端，关闭 cgi_input 的写入端 和 cgi_output 的读取端，设置 request_method 的环境变量，GET 的话设置 query_string 的环境变量，POST 的话设置 content_length 的环境变量，这些环境变量都是为了给 cgi 脚本调用，接着用 execl 运行 cgi 程序。
+	//进入子进程
+	if (pid == 0) {
+		char meth_env[255];//设置request_method 的环境变量
+		char query_env[255];//GET 的话设置 query_string 的环境变量
+		char length_env[255];//POST 的话设置 content_length 的环境变量
+		dup2(cgi_output[1], 1);//这就是将标准输出重定向到output管道的写入端，也就是输出内容将会输出到output写入
+		dup2(cgi_input[0], 0);//将标准输入重定向到input读取端，也就是将从input[0]读内容到input缓冲
+		close(cgi_output[0]);//关闭output管道的的读取端
+		close(cgi_input[1]);//关闭input管道的写入端
+		sprintf(meth_env, "REQUEST_METHOD=%s", method);//把method保存到环境变量中
+		putenv(meth_env);
+		if (strcasecmp(method, "GET") == 0){
+			sprintf(query_env, "QUERY_STRING=%s", query_string);//存储query_string到query_env
+			putenv(query_env);
+		}
+		else {
+			sprintf(length_env, "CONTENT_LENGTH=%d", content_length);//存储content_length到length_env
+			putenv(length_env);
+		}
+		execl(path, path, NULL);
+	}
+
+* 11.在父进程中，关闭 cgi_input 的读取端 和 cgi_output 的写入端，如果 POST 的话，把 POST 数据写入 cgi_input，已被重定向到 STDIN，读取 cgi_output 的管道输出到客户端，该管道输入是 STDOUT。接着关闭所有管道，等待子进程结束。这一部分比较乱，见下图说明：
+	else {
+		close(cgi_output[1]);	
+		close(cgi_input[0]);
+		if (strcasecmp(method, "POST") == 0) {
+			for (i = 0; i < content_length; i++) {
+				recv(client, &c, 1, 0);
+				write(cgi_input[1], &c, 1);
+			}
+		}
+		//依次发送给客户端
+		while (read(cgi_output[0], &c, 1) > 0) {
+			send(client, &c, 1, 0);
+		}
+		close(cgi_output[0]);//ouput的读
+		close(cgi_input[1]);//关闭input的写
+		waitpid(pid, &status, 0);//等待子进程中止
+	}
+}
+```
+
+	
 
 
 
-    （6）读取整个 HTTP 请求并丢弃，如果是 POST 则找出 Content-Length. 把 HTTP 200  状态码写到套接字。
 
-    （7） 建立两个管道，cgi_input 和 cgi_output, 并 fork 一个进程。
 
-    （8） 在子进程中，把 STDOUT 重定向到 cgi_outputt 的写入端，把 STDIN 重定向到 cgi_input 的读取端，关闭 cgi_input 的写入端 和 cgi_output 的读取端，设置 request_method 的环境变量，GET 的话设置 query_string 的环境变量，POST 的话设置 content_length 的环境变量，这些环境变量都是为了给 cgi 脚本调用，接着用 execl 运行 cgi 程序。
-
-    （9） 在父进程中，关闭 cgi_input 的读取端 和 cgi_output 的写入端，如果 POST 的话，把 POST 数据写入 cgi_input，已被重定向到 STDIN，读取 cgi_output 的管道输出到客户端，该管道输入是 STDOUT。接着关闭所有管道，等待子进程结束。这一部分比较乱，见下图说明：
 
 ![image](https://user-images.githubusercontent.com/81791654/166947375-dc108274-083e-4ee1-b131-400f95a177ba.png)
 
