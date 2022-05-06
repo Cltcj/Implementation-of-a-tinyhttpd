@@ -72,6 +72,7 @@ int startup(u_short *port)
      
      即`client_sock = accept(server_sock, (struct sockaddr *)&client_name, &client_name_len);` 
      
+     
      （3）循环创建新线程用accept_request()函数处理请求
      
      即`pthread_create(&newthread, NULL, accept_request, (void *)&client_sock)`//newthread传出参数，保存系统为我们分配好的线程ID,client_sock为向线程函数accept_request传递的参数。
