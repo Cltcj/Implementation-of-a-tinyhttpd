@@ -4,15 +4,15 @@
 
 ![image](https://user-images.githubusercontent.com/81791654/166947375-dc108274-083e-4ee1-b131-400f95a177ba.png)
 
-这个项目很简单，它是用来学习如何制作一个[tinyhttpd](https://sourceforge.net/projects/tinyhttpd/)，以及对tinyhttpd的改进
+&emsp;&emsp;这个项目很简单，它是用来学习如何制作一个[tinyhttpd](https://sourceforge.net/projects/tinyhttpd/)，以及对tinyhttpd的改进
 
-实现一个web服务器：
+&emsp;&emsp;实现一个web服务器：
 
-第一步：你得会写一个简单的HTML页面，以及关于 http 协议的一些知识、socket网络编程相关知识、进程通信已经会写一些简单的HTML页面，且对 http 协议有了一些了解。
+&emsp;&emsp;第一步：你得会写一个简单的HTML页面，以及关于 http 协议的一些知识、socket网络编程相关知识、进程通信已经会写一些简单的HTML页面，且对 http 协议有了一些了解。
 
-了解了这些之后，那我们该如何搭建我们的服务器呢？
+&emsp;&emsp;了解了这些之后，那我们该如何搭建我们的服务器呢？
 
-&emsp;&emsp;我们知道 http 只是应用层协议,所以我们仍然需要选择一个传输层的协议来完成我们的传输数据工作,这里我们的开发协议选择是 TCP+HTTP, 也就是说服务器搭建浏览依照 TCP,对数据进行解析和响应工作遵循 HTTP 的原则。
+&emsp;&emsp;我们知道 http 只是应用层协议，所以我们仍然需要选择一个传输层的协议来完成我们的传输数据工作,这里我们的开发协议选择是 TCP + HTTP, 也就是说服务器搭建浏览依照 TCP,对数据进行解析和响应工作遵循 HTTP 的原则。
 
 这样我们的思路很清晰了,编写一个 TCP 并发服务器,只不过收发消息的格式采用的是 HTTP 协议,如下图:
 
