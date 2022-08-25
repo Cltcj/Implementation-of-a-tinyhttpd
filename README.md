@@ -335,7 +335,7 @@ else {
 
 ## 基础知识：
 
-[1、Html介绍](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/Html)
+[1、HTML介绍](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/Html)
 
 [2、http 超文本传输协议](https://github.com/Cltcj/Implementation-of-a-tinyhttpd/tree/main/Html)
 
